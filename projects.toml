@@ -1,0 +1,8 @@
+[projects.dw2md]
+path = "/Users/tau/projects/dw2md"
+github = "tnguyen21/dw2md"
+tier = "ship"
+priority = "high"
+stack = "rust"
+done_criteria = "Published on crates.io, CI green, <5 open issues"
+promote_channels = ["hn", "reddit", "x", "blog"]

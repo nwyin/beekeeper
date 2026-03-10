@@ -1,0 +1,27 @@
+[project]
+name = "mission-control"
+version = "0.1.0"
+description = "Automated portfolio health monitoring system"
+readme = "README.md"
+authors = [
+    { name = "Tommy Bui Nguyen", email = "tommynguyen0512@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "click>=8.1",
+]
+
+[project.scripts]
+mission-control = "mission_control.cli:cli"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.21,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 144
