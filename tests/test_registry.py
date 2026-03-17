@@ -3,7 +3,7 @@
 from pathlib import Path
 from textwrap import dedent
 
-from mission_control.registry import ProjectConfig, load_registry
+from beekeeper.registry import ProjectConfig, load_registry
 
 
 def test_load_registry_basic(tmp_path: Path) -> None:
@@ -13,10 +13,9 @@ def test_load_registry_basic(tmp_path: Path) -> None:
         [projects.myproject]
         path = "/tmp/myproject"
         github = "user/myproject"
-        tier = "ship"
-        priority = "high"
+        type = "tool"
+        attention = "focus"
         stack = "rust"
-        done_criteria = "All tests pass"
         promote_channels = ["hn", "x"]
     """)
     )
@@ -28,10 +27,9 @@ def test_load_registry_basic(tmp_path: Path) -> None:
     assert p.name == "myproject"
     assert p.path == Path("/tmp/myproject")
     assert p.github == "user/myproject"
-    assert p.tier == "ship"
-    assert p.priority == "high"
+    assert p.type == "tool"
+    assert p.attention == "focus"
     assert p.stack == "rust"
-    assert p.done_criteria == "All tests pass"
     assert p.promote_channels == ["hn", "x"]
 
 
@@ -47,10 +45,9 @@ def test_load_registry_defaults(tmp_path: Path) -> None:
     projects = load_registry(toml_file)
     p = projects["minimal"]
     assert p.github is None
-    assert p.tier == "support"
-    assert p.priority == "medium"
+    assert p.type == "tool"
+    assert p.attention == "maintain"
     assert p.stack == "markdown"
-    assert p.done_criteria == ""
     assert p.promote_channels == []
 
 
@@ -60,11 +57,11 @@ def test_load_registry_multiple_projects(tmp_path: Path) -> None:
         dedent("""\
         [projects.alpha]
         path = "/tmp/alpha"
-        tier = "ship"
+        type = "tool"
 
         [projects.beta]
         path = "/tmp/beta"
-        tier = "research"
+        type = "research"
     """)
     )
 

@@ -6,8 +6,10 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-VALID_TIERS = {"ship", "build", "research", "support"}
-VALID_PRIORITIES = {"high", "medium", "low"}
+from beekeeper.paths import DEFAULT_REGISTRY_PATH
+
+VALID_TYPES = {"tool", "app", "research", "content"}
+VALID_ATTENTION = {"focus", "maintain", "explore", "habit", "shelved"}
 VALID_STACKS = {"rust", "python", "typescript", "markdown"}
 
 
@@ -16,16 +18,15 @@ class ProjectConfig:
     name: str
     path: Path
     github: str | None = None
-    tier: str = "support"
-    priority: str = "medium"
+    type: str = "tool"
+    attention: str = "maintain"
     stack: str = "markdown"
-    done_criteria: str = ""
     promote_channels: list[str] = field(default_factory=list)
 
 
 def load_registry(registry_path: Path | None = None) -> dict[str, ProjectConfig]:
     if registry_path is None:
-        registry_path = Path(__file__).resolve().parents[2] / "projects.toml"
+        registry_path = DEFAULT_REGISTRY_PATH
 
     with open(registry_path, "rb") as f:
         data = tomllib.load(f)
@@ -36,10 +37,9 @@ def load_registry(registry_path: Path | None = None) -> dict[str, ProjectConfig]
             name=name,
             path=Path(cfg["path"]).expanduser(),
             github=cfg.get("github"),
-            tier=cfg.get("tier", "support"),
-            priority=cfg.get("priority", "medium"),
+            type=cfg.get("type", "tool"),
+            attention=cfg.get("attention", "maintain"),
             stack=cfg.get("stack", "markdown"),
-            done_criteria=cfg.get("done_criteria", ""),
             promote_channels=cfg.get("promote_channels", []),
         )
     return projects

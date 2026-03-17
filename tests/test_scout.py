@@ -5,8 +5,8 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
-from mission_control.registry import ProjectConfig
-from mission_control.scout import (
+from beekeeper.registry import ProjectConfig
+from beekeeper.scout import (
     DependencyReport,
     GitHubReport,
     GitReport,
@@ -23,8 +23,8 @@ def _make_project(tmp_path: Path, **kwargs) -> ProjectConfig:
         "name": "testproject",
         "path": tmp_path,
         "github": "user/testproject",
-        "tier": "ship",
-        "priority": "high",
+        "type": "tool",
+        "attention": "focus",
         "stack": "rust",
     }
     defaults.update(kwargs)
@@ -40,20 +40,20 @@ class TestScoutGit:
 
     def test_git_log_success(self, tmp_path: Path) -> None:
         mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="2026-03-09T10:00:00-05:00\n", stderr="")
-        with patch("mission_control.scout._run", return_value=mock_result):
+        with patch("beekeeper.scout._run", return_value=mock_result):
             project = _make_project(tmp_path)
             report = scout_git(project)
             assert report.last_commit_date == "2026-03-09T10:00:00-05:00"
             assert report.days_since_last_commit is not None
 
     def test_git_timeout(self, tmp_path: Path) -> None:
-        with patch("mission_control.scout._run", side_effect=subprocess.TimeoutExpired("git", 30)):
+        with patch("beekeeper.scout._run", side_effect=subprocess.TimeoutExpired("git", 30)):
             project = _make_project(tmp_path)
             report = scout_git(project)
             assert report.error is not None
 
     def test_git_not_found(self, tmp_path: Path) -> None:
-        with patch("mission_control.scout._run", side_effect=FileNotFoundError("git")):
+        with patch("beekeeper.scout._run", side_effect=FileNotFoundError("git")):
             project = _make_project(tmp_path)
             report = scout_git(project)
             assert report.error is not None
@@ -79,7 +79,7 @@ class TestScoutGitHub:
             call_count["n"] += 1
             return responses[idx]
 
-        with patch("mission_control.scout._run", side_effect=mock_run):
+        with patch("beekeeper.scout._run", side_effect=mock_run):
             project = _make_project(tmp_path)
             report = scout_github(project)
             assert report.star_count == 5
@@ -89,7 +89,7 @@ class TestScoutGitHub:
             assert report.ci_status == "pass"
 
     def test_gh_timeout(self, tmp_path: Path) -> None:
-        with patch("mission_control.scout._run", side_effect=subprocess.TimeoutExpired("gh", 30)):
+        with patch("beekeeper.scout._run", side_effect=subprocess.TimeoutExpired("gh", 30)):
             project = _make_project(tmp_path)
             report = scout_github(project)
             assert report.error is not None
@@ -105,21 +105,42 @@ class TestScoutDependencies:
     def test_cargo_outdated_success(self, tmp_path: Path) -> None:
         cargo_output = "Name    Project  Compat  Latest  Kind\n----    -------  ------  ------  ----\nreqwest 0.11.0   0.12.0  0.12.0  Normal\nserde   1.0.0    1.1.0   1.1.0   Normal\n"
         mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=cargo_output, stderr="")
-        with patch("mission_control.scout._run", return_value=mock_result):
+        with patch("beekeeper.scout._run", return_value=mock_result):
             project = _make_project(tmp_path, stack="rust")
             report = scout_dependencies(project)
             assert "reqwest" in report.outdated
             assert "serde" in report.outdated
 
     def test_tool_not_found(self, tmp_path: Path) -> None:
-        with patch("mission_control.scout._run", side_effect=FileNotFoundError("cargo")):
+        with patch("beekeeper.scout._run", side_effect=FileNotFoundError("cargo")):
             project = _make_project(tmp_path, stack="rust")
             report = scout_dependencies(project)
             assert report.error is not None
             assert "not found" in report.error.lower()
 
+    def test_bun_outdated_success(self, tmp_path: Path) -> None:
+        bun_output = (
+            "bun outdated v1.3.9 (cf6cdbbb)\n"
+            "|--------------------------------------------------------|\n"
+            "| Package                    | Current | Update | Latest |\n"
+            "|----------------------------|---------|--------|--------|\n"
+            "| @biomejs/biome (dev)       | 1.9.4   | 1.9.4  | 2.4.6  |\n"
+            "|----------------------------|---------|--------|--------|\n"
+            "| turbo (dev)                | 2.8.10  | 2.8.15 | 2.8.15 |\n"
+            "|--------------------------------------------------------|\n"
+        )
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=bun_output, stderr="")
+        with patch("beekeeper.scout._run", return_value=mock_result):
+            project = _make_project(tmp_path, stack="typescript")
+            report = scout_dependencies(project)
+            assert "@biomejs/biome" in report.outdated
+            assert "turbo" in report.outdated
+            assert len(report.outdated) == 2
+            # Should not contain table borders
+            assert not any("|" in dep for dep in report.outdated)
+
     def test_timeout(self, tmp_path: Path) -> None:
-        with patch("mission_control.scout._run", side_effect=subprocess.TimeoutExpired("cargo", 30)):
+        with patch("beekeeper.scout._run", side_effect=subprocess.TimeoutExpired("cargo", 30)):
             project = _make_project(tmp_path, stack="rust")
             report = scout_dependencies(project)
             assert report.error == "Dependency check timed out"

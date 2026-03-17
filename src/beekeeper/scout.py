@@ -5,15 +5,20 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from mission_control.registry import ProjectConfig
+from beekeeper.registry import ProjectConfig
 
 logger = logging.getLogger(__name__)
 
 SUBPROCESS_TIMEOUT = 30
+
+# Packages that are part of venv infrastructure, not actual project deps.
+# We use uv for all Python projects, so these being "outdated" is irrelevant.
+IGNORED_PYTHON_DEPS = {"pip", "setuptools", "wheel"}
 
 
 @dataclass
@@ -172,7 +177,7 @@ def scout_dependencies(project: ProjectConfig) -> DependencyReport:
                 lines = result.stdout.strip().splitlines()
                 for line in lines[2:]:
                     parts = line.split()
-                    if parts:
+                    if parts and parts[0] not in IGNORED_PYTHON_DEPS:
                         report.outdated.append(parts[0])
             elif result.returncode != 0:
                 report.error = f"uv pip list --outdated failed: {result.stderr.strip()}"
@@ -180,11 +185,16 @@ def scout_dependencies(project: ProjectConfig) -> DependencyReport:
         elif project.stack == "typescript":
             result = _run(["bun", "outdated"], cwd=project.path)
             if result.returncode == 0 and result.stdout.strip():
-                lines = result.stdout.strip().splitlines()
-                for line in lines[1:]:
-                    parts = line.split()
-                    if parts:
-                        report.outdated.append(parts[0])
+                for line in result.stdout.strip().splitlines():
+                    # bun outdated uses pipe-delimited tables: "| package (dev) | 1.0 | 1.1 | 1.1 |"
+                    line = line.strip()
+                    if line.startswith("|") and not line.startswith("|--") and "Package" not in line:
+                        cells = [c.strip() for c in line.split("|") if c.strip()]
+                        if cells:
+                            # Strip trailing "(dev)" marker
+                            pkg = cells[0].removesuffix("(dev)").strip()
+                            if pkg:
+                                report.outdated.append(pkg)
             elif result.returncode != 0:
                 report.error = f"bun outdated failed: {result.stderr.strip()}"
 
@@ -201,13 +211,17 @@ def scout_dependencies(project: ProjectConfig) -> DependencyReport:
 
 def scout_project(project: ProjectConfig) -> ScoutReport:
     logger.info("Scouting %s", project.name)
-    return ScoutReport(
-        project=project.name,
-        scouted_at=datetime.now(timezone.utc).isoformat(),
-        git=scout_git(project),
-        github=scout_github(project),
-        dependencies=scout_dependencies(project),
-    )
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        git_future = pool.submit(scout_git, project)
+        github_future = pool.submit(scout_github, project)
+        deps_future = pool.submit(scout_dependencies, project)
+        return ScoutReport(
+            project=project.name,
+            scouted_at=datetime.now(timezone.utc).isoformat(),
+            git=git_future.result(),
+            github=github_future.result(),
+            dependencies=deps_future.result(),
+        )
 
 
 def save_report(report: ScoutReport, base_dir: Path | None = None) -> Path:

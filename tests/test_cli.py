@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from click.testing import CliRunner
 
-from mission_control.cli import cli
+from beekeeper.cli import cli
 
 
 def test_scout_unknown_project(tmp_path: Path) -> None:
@@ -39,8 +39,8 @@ def test_scout_single_project(tmp_path: Path) -> None:
 
     output_dir = tmp_path / "reports"
 
-    with patch("mission_control.cli.scout_project") as mock_scout:
-        from mission_control.scout import DependencyReport, GitHubReport, GitReport, ScoutReport
+    with patch("beekeeper.cli.scout_project") as mock_scout:
+        from beekeeper.scout import DependencyReport, GitHubReport, GitReport, ScoutReport
 
         mock_scout.return_value = ScoutReport(
             project="myproject",
@@ -77,7 +77,7 @@ def test_scout_resilient_to_failure(tmp_path: Path) -> None:
         call_count["n"] += 1
         if config.name == "broken":
             raise RuntimeError("Scout failed!")
-        from mission_control.scout import DependencyReport, GitHubReport, GitReport, ScoutReport
+        from beekeeper.scout import DependencyReport, GitHubReport, GitReport, ScoutReport
 
         return ScoutReport(
             project=config.name,
@@ -87,7 +87,7 @@ def test_scout_resilient_to_failure(tmp_path: Path) -> None:
             dependencies=DependencyReport(),
         )
 
-    with patch("mission_control.cli.scout_project", side_effect=mock_scout):
+    with patch("beekeeper.cli.scout_project", side_effect=mock_scout):
         runner = CliRunner()
         result = runner.invoke(cli, ["scout", "--registry", str(toml_file), "--output-dir", str(output_dir)])
         # Should not crash despite broken project
