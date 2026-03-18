@@ -2,6 +2,8 @@
 
 Automated portfolio health monitoring. Scouts your projects nightly, synthesizes findings into an Obsidian daily note.
 
+Designed to work with [nwyin/hive](https://github.com/nwyin/hive) for autonomous task dispatch — beekeeper identifies maintenance work, hive executes it.
+
 ## Setup
 
 ```bash

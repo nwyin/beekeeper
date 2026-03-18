@@ -35,16 +35,19 @@ Your briefing should:
 
 Some projects have Hive set up for autonomous multi-agent work. When you spot mechanical maintenance tasks for these projects, include a "Dispatch proposals" section at the end of your briefing with ready-to-run shell commands.
 
-Use the headless queen command:
+**Important**: All task delegation goes through Hive, never through GitHub directly. Do not suggest `gh issue create` or any `gh issue` write commands. The `gh` CLI is used only for *reading* project health data (open issue counts, PR counts, CI status). To create work items, always use the Hive headless queen command:
+
 ```
 hive --project /path/to/repo queen --headless -p "task description"
 ```
+
+The headless queen decomposes the task description into Hive issues and executes them autonomously — no human input required.
 
 Guardrails:
 - Only propose dispatch for focus or maintain projects
 - Only mechanical tasks: dependency bumps, branch pruning, linting fixes, test scaffolding, doc generation
 - Never dispatch: uncommitted change handling, CI debugging, feature work, refactors that need design judgment
-- Keep task descriptions specific and self-contained — the headless queen will decompose them into issues without human input
+- Keep task descriptions specific and self-contained
 
 If there are no dispatch-worthy tasks, omit the section entirely.
 
