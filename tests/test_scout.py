@@ -88,6 +88,57 @@ class TestScoutGitHub:
             assert report.open_pr_count == 1
             assert report.ci_status == "pass"
 
+    def test_detect_github_from_git_remote(self, tmp_path: Path) -> None:
+        """When github is None in registry, fall back to parsing git remote."""
+        git_remote_result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="git@github.com:nwyin/irradiate.git\n", stderr=""
+        )
+        gh_results = [
+            subprocess.CompletedProcess(args=[], returncode=0, stdout='{"stargazerCount": 3, "forkCount": 0}', stderr=""),
+            subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr=""),
+            subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr=""),
+            subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr=""),
+        ]
+        call_count = {"n": 0}
+
+        def mock_run(args, **kwargs):
+            if "get-url" in args:
+                return git_remote_result
+            idx = call_count["n"]
+            call_count["n"] += 1
+            return gh_results[idx]
+
+        with patch("beekeeper.scout._run", side_effect=mock_run):
+            project = _make_project(tmp_path, github=None)
+            report = scout_github(project)
+            assert report.error is None
+            assert report.star_count == 3
+
+    def test_detect_github_from_https_remote(self, tmp_path: Path) -> None:
+        """HTTPS remotes should also be detected."""
+        git_remote_result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="https://github.com/nwyin/irradiate.git\n", stderr=""
+        )
+        gh_results = [
+            subprocess.CompletedProcess(args=[], returncode=0, stdout='{"stargazerCount": 0, "forkCount": 0}', stderr=""),
+            subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr=""),
+            subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr=""),
+            subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr=""),
+        ]
+        call_count = {"n": 0}
+
+        def mock_run(args, **kwargs):
+            if "get-url" in args:
+                return git_remote_result
+            idx = call_count["n"]
+            call_count["n"] += 1
+            return gh_results[idx]
+
+        with patch("beekeeper.scout._run", side_effect=mock_run):
+            project = _make_project(tmp_path, github=None)
+            report = scout_github(project)
+            assert report.error is None
+
     def test_gh_timeout(self, tmp_path: Path) -> None:
         with patch("beekeeper.scout._run", side_effect=subprocess.TimeoutExpired("gh", 30)):
             project = _make_project(tmp_path)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
@@ -104,15 +105,31 @@ def scout_git(project: ProjectConfig) -> GitReport:
     return report
 
 
+def _detect_github_remote(path: Path) -> str | None:
+    """Try to extract an owner/repo slug from the git remote origin URL."""
+    try:
+        result = _run(["git", "remote", "get-url", "origin"], cwd=path)
+        if result.returncode == 0:
+            url = result.stdout.strip()
+            match = re.search(r"github\.com[:/](.+?)(?:\.git)?$", url)
+            if match:
+                return match.group(1)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+    return None
+
+
 def scout_github(project: ProjectConfig) -> GitHubReport:
     report = GitHubReport()
 
-    if not project.github:
+    github: str | None = project.github or _detect_github_remote(project.path)
+    if not github:
         report.error = "No GitHub remote configured"
         return report
+    assert isinstance(github, str)
 
     try:
-        result = _run(["gh", "repo", "view", project.github, "--json", "stargazerCount,forkCount"])
+        result = _run(["gh", "repo", "view", github, "--json", "stargazerCount,forkCount"])
         if result.returncode == 0:
             data = json.loads(result.stdout)
             report.star_count = data.get("stargazerCount", 0)
@@ -122,21 +139,21 @@ def scout_github(project: ProjectConfig) -> GitHubReport:
         return report
 
     try:
-        result = _run(["gh", "issue", "list", "--repo", project.github, "--state", "open", "--json", "number"])
+        result = _run(["gh", "issue", "list", "--repo", github, "--state", "open", "--json", "number"])
         if result.returncode == 0:
             report.open_issue_count = len(json.loads(result.stdout))
     except (subprocess.TimeoutExpired, FileNotFoundError, json.JSONDecodeError):
         pass
 
     try:
-        result = _run(["gh", "pr", "list", "--repo", project.github, "--state", "open", "--json", "number"])
+        result = _run(["gh", "pr", "list", "--repo", github, "--state", "open", "--json", "number"])
         if result.returncode == 0:
             report.open_pr_count = len(json.loads(result.stdout))
     except (subprocess.TimeoutExpired, FileNotFoundError, json.JSONDecodeError):
         pass
 
     try:
-        result = _run(["gh", "run", "list", "--repo", project.github, "--limit", "1", "--json", "conclusion"])
+        result = _run(["gh", "run", "list", "--repo", github, "--limit", "1", "--json", "conclusion"])
         if result.returncode == 0:
             runs = json.loads(result.stdout)
             if runs:
