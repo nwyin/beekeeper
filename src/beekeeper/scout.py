@@ -21,6 +21,23 @@ SUBPROCESS_TIMEOUT = 30
 # We use uv for all Python projects, so these being "outdated" is irrelevant.
 IGNORED_PYTHON_DEPS = {"pip", "setuptools", "wheel"}
 
+# Pattern matching table headers and separator lines in CLI output.
+_HEADER_OR_SEPARATOR_RE = re.compile(r"^[-=|+]+$")
+_HEADER_WORDS = {"Name", "Package", "Crate", "Project", "Kind", "Version", "Latest", "Compat", "Platform", "Type"}
+
+
+def _is_dep_line(line: str) -> bool:
+    """Return True if *line* looks like an actual dependency row, not a header or separator."""
+    parts = line.split()
+    if not parts:
+        return False
+    first = parts[0]
+    if _HEADER_OR_SEPARATOR_RE.fullmatch(first):
+        return False
+    if first in _HEADER_WORDS:
+        return False
+    return True
+
 
 @dataclass
 class GitReport:
@@ -179,23 +196,20 @@ def scout_dependencies(project: ProjectConfig) -> DependencyReport:
         if project.stack == "rust":
             result = _run(["cargo", "outdated", "--root-deps-only", "--exit-code", "0"], cwd=project.path)
             if result.returncode == 0 and result.stdout.strip():
-                lines = result.stdout.strip().splitlines()
-                # Skip header lines, collect dep names
-                for line in lines[2:]:  # first two lines are header
-                    parts = line.split()
-                    if parts:
-                        report.outdated.append(parts[0])
+                for line in result.stdout.strip().splitlines():
+                    if _is_dep_line(line):
+                        report.outdated.append(line.split()[0])
             elif result.returncode != 0:
                 report.error = f"cargo outdated failed: {result.stderr.strip()}"
 
         elif project.stack == "python":
             result = _run(["uv", "pip", "list", "--outdated"], cwd=project.path)
             if result.returncode == 0 and result.stdout.strip():
-                lines = result.stdout.strip().splitlines()
-                for line in lines[2:]:
-                    parts = line.split()
-                    if parts and parts[0] not in IGNORED_PYTHON_DEPS:
-                        report.outdated.append(parts[0])
+                for line in result.stdout.strip().splitlines():
+                    if _is_dep_line(line):
+                        pkg = line.split()[0]
+                        if pkg not in IGNORED_PYTHON_DEPS:
+                            report.outdated.append(pkg)
             elif result.returncode != 0:
                 report.error = f"uv pip list --outdated failed: {result.stderr.strip()}"
 

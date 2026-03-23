@@ -90,9 +90,7 @@ class TestScoutGitHub:
 
     def test_detect_github_from_git_remote(self, tmp_path: Path) -> None:
         """When github is None in registry, fall back to parsing git remote."""
-        git_remote_result = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="git@github.com:nwyin/irradiate.git\n", stderr=""
-        )
+        git_remote_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="git@github.com:nwyin/irradiate.git\n", stderr="")
         gh_results = [
             subprocess.CompletedProcess(args=[], returncode=0, stdout='{"stargazerCount": 3, "forkCount": 0}', stderr=""),
             subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr=""),
@@ -116,9 +114,7 @@ class TestScoutGitHub:
 
     def test_detect_github_from_https_remote(self, tmp_path: Path) -> None:
         """HTTPS remotes should also be detected."""
-        git_remote_result = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="https://github.com/nwyin/irradiate.git\n", stderr=""
-        )
+        git_remote_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="https://github.com/nwyin/irradiate.git\n", stderr="")
         gh_results = [
             subprocess.CompletedProcess(args=[], returncode=0, stdout='{"stargazerCount": 0, "forkCount": 0}', stderr=""),
             subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr=""),
@@ -161,6 +157,50 @@ class TestScoutDependencies:
             report = scout_dependencies(project)
             assert "reqwest" in report.outdated
             assert "serde" in report.outdated
+
+    def test_cargo_outdated_with_extra_header_lines(self, tmp_path: Path) -> None:
+        """cargo outdated can emit extra separator lines around the header."""
+        cargo_output = (
+            "================================================================================\n"
+            "Name    Project  Compat  Latest  Kind\n"
+            "----    -------  ------  ------  ----\n"
+            "================================================================================\n"
+            "reqwest 0.11.0   0.12.0  0.12.0  Normal\n"
+        )
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=cargo_output, stderr="")
+        with patch("beekeeper.scout._run", return_value=mock_result):
+            project = _make_project(tmp_path, stack="rust")
+            report = scout_dependencies(project)
+            assert report.outdated == ["reqwest"]
+
+    def test_python_outdated_success(self, tmp_path: Path) -> None:
+        uv_output = (
+            "Package       Version Latest Type\n"
+            "------------- ------- ------ -----\n"
+            "anthropic     0.84.0  0.86.0 wheel\n"
+            "pydantic-core 2.41.5  2.42.0 wheel\n"
+        )
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=uv_output, stderr="")
+        with patch("beekeeper.scout._run", return_value=mock_result):
+            project = _make_project(tmp_path, stack="python")
+            report = scout_dependencies(project)
+            assert "anthropic" in report.outdated
+            assert "pydantic-core" in report.outdated
+            assert len(report.outdated) == 2
+
+    def test_python_outdated_filters_infra_packages(self, tmp_path: Path) -> None:
+        uv_output = (
+            "Package    Version Latest Type\n"
+            "---------- ------- ------ -----\n"
+            "pip        24.0    24.1   wheel\n"
+            "setuptools 69.0    70.0   wheel\n"
+            "requests   2.31.0  2.32.0 wheel\n"
+        )
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=uv_output, stderr="")
+        with patch("beekeeper.scout._run", return_value=mock_result):
+            project = _make_project(tmp_path, stack="python")
+            report = scout_dependencies(project)
+            assert report.outdated == ["requests"]
 
     def test_tool_not_found(self, tmp_path: Path) -> None:
         with patch("beekeeper.scout._run", side_effect=FileNotFoundError("cargo")):
